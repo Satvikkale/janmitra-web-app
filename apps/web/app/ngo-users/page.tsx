@@ -16,6 +16,15 @@ interface NgoUserData {
   updatedAt: string;
 }
 
+interface ProgressUpdate {
+  _id?: string;
+  date: string;
+  description: string;
+  photos?: string[];
+  updatedBy: string;
+  updatedByName?: string;
+}
+
 interface Complaint {
   _id: string;
   category: string;
@@ -25,6 +34,7 @@ interface Complaint {
   priority: 'low' | 'med' | 'high';
   assignedTo?: string;
   createdAt: string;
+  progressUpdates?: ProgressUpdate[];
 }
 
 export default function NGOUsers() {
@@ -35,6 +45,12 @@ export default function NGOUsers() {
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
+  const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [progressForm, setProgressForm] = useState({ description: '', photos: [] as string[] });
+  const [submittingProgress, setSubmittingProgress] = useState(false);
+  const [activeTab, setActiveTab] = useState<'assigned' | 'in_progress' | 'resolved'>('assigned');
+  const progressPhotoRef = useRef<HTMLInputElement>(null);
   const [editForm, setEditForm] = useState({
     name: '',
     mobileNo: '',
@@ -43,6 +59,24 @@ export default function NGOUsers() {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { isLoggedIn } = useAuth();
+
+  // Filter complaints based on active tab
+  const assignedComplaints = complaints.filter(c => c.status === 'open' || c.status === 'assigned');
+  const inProgressComplaints = complaints.filter(c => c.status === 'in_progress');
+  const resolvedComplaints = complaints.filter(c => c.status === 'resolved' || c.status === 'closed');
+
+  const getFilteredComplaints = () => {
+    switch (activeTab) {
+      case 'assigned':
+        return assignedComplaints;
+      case 'in_progress':
+        return inProgressComplaints;
+      case 'resolved':
+        return resolvedComplaints;
+      default:
+        return complaints;
+    }
+  };
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -174,6 +208,65 @@ export default function NGOUsers() {
     }
   };
 
+  const handleProgressPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const compressedImage = await compressImage(file, 800, 0.8);
+        setProgressForm(prev => ({ ...prev, photos: [...prev.photos, compressedImage] }));
+      } catch (err) {
+        console.error('Error compressing image:', err);
+        setError('Failed to process image');
+      }
+    }
+  };
+
+  const removeProgressPhoto = (index: number) => {
+    setProgressForm(prev => ({
+      ...prev,
+      photos: prev.photos.filter((_, i) => i !== index)
+    }));
+  };
+
+  const openProgressModal = (complaint: Complaint) => {
+    setSelectedComplaint(complaint);
+    setProgressForm({ description: '', photos: [] });
+    setShowProgressModal(true);
+  };
+
+  const handleSubmitProgress = async () => {
+    if (!selectedComplaint || !progressForm.description.trim()) return;
+    
+    try {
+      setSubmittingProgress(true);
+      await apiFetch(`/complaints/${selectedComplaint._id}/progress`, {
+        method: 'POST',
+        body: JSON.stringify({
+          description: progressForm.description,
+          photos: progressForm.photos
+        })
+      });
+      await fetchComplaints();
+      setShowProgressModal(false);
+      setSelectedComplaint(null);
+      setProgressForm({ description: '', photos: [] });
+    } catch (err) {
+      console.error('Error submitting progress:', err);
+      setError('Failed to submit progress update');
+    } finally {
+      setSubmittingProgress(false);
+    }
+  };
+
+  const viewComplaintDetails = async (complaint: Complaint) => {
+    try {
+      const fullComplaint = await apiFetch(`/complaints/${complaint._id}`);
+      setSelectedComplaint(fullComplaint);
+    } catch (err) {
+      console.error('Error fetching complaint details:', err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-white p-6 rounded-lg shadow-lg border border-gray-200">
@@ -290,13 +383,66 @@ export default function NGOUsers() {
               <h3 className="text-xl font-bold text-gray-900 mb-1">Assigned Complaints</h3>
               <p className="text-gray-600 text-sm mb-6">Track and manage your complaints</p>
 
-              {complaints.length === 0 ? (
+              {/* Tabs */}
+              <div className="flex border-b border-gray-200 mb-6">
+                <button
+                  onClick={() => setActiveTab('assigned')}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'assigned'
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-semibold">
+                      {assignedComplaints.length}
+                    </span>
+                    Assigned
+                  </span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('in_progress')}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'in_progress'
+                      ? 'border-purple-600 text-purple-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-semibold">
+                      {inProgressComplaints.length}
+                    </span>
+                    In Progress
+                  </span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('resolved')}
+                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === 'resolved'
+                      ? 'border-green-600 text-green-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-semibold">
+                      {resolvedComplaints.length}
+                    </span>
+                    Resolved
+                  </span>
+                </button>
+              </div>
+
+              {getFilteredComplaints().length === 0 ? (
                 <div className="bg-gray-100 p-8 rounded-lg text-center">
-                  <p className="text-gray-500">No complaints assigned yet</p>
+                  <p className="text-gray-500">
+                    {activeTab === 'assigned' && 'No new complaints assigned'}
+                    {activeTab === 'in_progress' && 'No complaints in progress'}
+                    {activeTab === 'resolved' && 'No resolved complaints'}
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {complaints.map((complaint) => (
+                  {getFilteredComplaints().map((complaint) => (
                     <div key={complaint._id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-sm transition-all">
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex-1">
@@ -327,6 +473,28 @@ export default function NGOUsers() {
                       <p className="text-sm text-gray-600 mb-4">
                         {complaint.description || 'No description'}
                       </p>
+
+                      {/* Progress Updates Summary */}
+                      {complaint.progressUpdates && complaint.progressUpdates.length > 0 && (
+                        <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-blue-700">
+                              📋 {complaint.progressUpdates.length} Progress Update{complaint.progressUpdates.length > 1 ? 's' : ''}
+                            </span>
+                            <button
+                              onClick={() => viewComplaintDetails(complaint)}
+                              className="text-xs text-blue-600 hover:text-blue-800 underline"
+                            >
+                              View All
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-600">
+                            Latest: {complaint.progressUpdates[complaint.progressUpdates.length - 1]?.description?.slice(0, 100)}
+                            {(complaint.progressUpdates[complaint.progressUpdates.length - 1]?.description?.length || 0) > 100 ? '...' : ''}
+                          </p>
+                        </div>
+                      )}
+
                       <div className="flex justify-between items-center">
                         <span className="text-xs text-gray-400">
                           {new Date(complaint.createdAt).toLocaleDateString()}
@@ -342,12 +510,28 @@ export default function NGOUsers() {
                             </button>
                           )}
                           {complaint.status === 'in_progress' && (
+                            <>
+                              <button
+                                onClick={() => openProgressModal(complaint)}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                              >
+                                + Add Update
+                              </button>
+                              <button
+                                onClick={() => handleStatusUpdate(complaint._id, 'resolved')}
+                                disabled={updatingStatus === complaint._id}
+                                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-50"
+                              >
+                                {updatingStatus === complaint._id ? 'Updating...' : 'Resolve'}
+                              </button>
+                            </>
+                          )}
+                          {(complaint.status === 'resolved' || complaint.status === 'closed') && (
                             <button
-                              onClick={() => handleStatusUpdate(complaint._id, 'resolved')}
-                              disabled={updatingStatus === complaint._id}
-                              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-50"
+                              onClick={() => viewComplaintDetails(complaint)}
+                              className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors"
                             >
-                              {updatingStatus === complaint._id ? 'Updating...' : 'Resolve'}
+                              View Details
                             </button>
                           )}
                         </div>
@@ -443,6 +627,216 @@ export default function NGOUsers() {
                   {saving ? 'Saving...' : 'Save'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Progress Update Modal */}
+        {showProgressModal && selectedComplaint && (
+          <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-lg max-h-[90vh] overflow-y-auto">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Add Daily Progress Update</h2>
+              <p className="text-sm text-gray-500 mb-6">
+                {selectedComplaint.category} - {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
+
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Work Description *
+                </label>
+                <textarea
+                  value={progressForm.description}
+                  onChange={(e) => setProgressForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Describe the work done today..."
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Photos of Work Done
+                </label>
+                
+                {/* Photo previews */}
+                {progressForm.photos.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    {progressForm.photos.map((photo, index) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={photo}
+                          alt={`Work photo ${index + 1}`}
+                          className="w-full h-24 object-cover rounded-lg"
+                        />
+                        <button
+                          onClick={() => removeProgressPhoto(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <button
+                  type="button"
+                  onClick={() => progressPhotoRef.current?.click()}
+                  className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <p className="text-sm text-gray-600">Click to add photos</p>
+                </button>
+                <input
+                  ref={progressPhotoRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleProgressPhotoChange}
+                  className="hidden"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowProgressModal(false);
+                    setSelectedComplaint(null);
+                    setProgressForm({ description: '', photos: [] });
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmitProgress}
+                  disabled={submittingProgress || !progressForm.description.trim()}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50"
+                >
+                  {submittingProgress ? 'Submitting...' : 'Submit Update'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View Complaint Details Modal */}
+        {selectedComplaint && !showProgressModal && (
+          <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl shadow-lg max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">{selectedComplaint.category}</h2>
+                  {selectedComplaint.subcategory && (
+                    <p className="text-sm text-gray-500">{selectedComplaint.subcategory}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => setSelectedComplaint(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="flex gap-2 mb-4">
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  selectedComplaint.status === 'open' ? 'bg-yellow-100 text-yellow-700' :
+                  selectedComplaint.status === 'assigned' ? 'bg-blue-100 text-blue-700' :
+                  selectedComplaint.status === 'in_progress' ? 'bg-purple-100 text-purple-700' :
+                  selectedComplaint.status === 'resolved' ? 'bg-green-100 text-green-700' :
+                  'bg-gray-100 text-gray-700'
+                }`}>
+                  {selectedComplaint.status?.replace('_', ' ')}
+                </span>
+                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  selectedComplaint.priority === 'high' ? 'bg-red-100 text-red-700' :
+                  selectedComplaint.priority === 'med' ? 'bg-orange-100 text-orange-700' :
+                  'bg-green-100 text-green-700'
+                }`}>
+                  {selectedComplaint.priority} priority
+                </span>
+              </div>
+
+              <p className="text-gray-600 mb-6">{selectedComplaint.description || 'No description'}</p>
+
+              {/* Progress Timeline */}
+              <div className="border-t pt-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Progress Timeline</h3>
+                
+                {(!selectedComplaint.progressUpdates || selectedComplaint.progressUpdates.length === 0) ? (
+                  <div className="bg-gray-100 p-6 rounded-lg text-center">
+                    <p className="text-gray-500">No progress updates yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {selectedComplaint.progressUpdates.map((update, index) => (
+                      <div key={index} className="relative pl-6 border-l-2 border-blue-200 pb-4 last:pb-0">
+                        <div className="absolute -left-2 top-0 w-4 h-4 bg-blue-500 rounded-full"></div>
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="text-xs font-semibold text-blue-600">
+                              {new Date(update.date).toLocaleDateString('en-US', { 
+                                weekday: 'short', 
+                                year: 'numeric', 
+                                month: 'short', 
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                            {update.updatedByName && (
+                              <span className="text-xs text-gray-500">by {update.updatedByName}</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-700 mb-3">{update.description}</p>
+                          
+                          {update.photos && update.photos.length > 0 && (
+                            <div className="grid grid-cols-3 gap-2">
+                              {update.photos.map((photo, photoIndex) => (
+                                <img
+                                  key={photoIndex}
+                                  src={photo}
+                                  alt={`Progress photo ${photoIndex + 1}`}
+                                  className="w-full h-20 object-cover rounded-lg cursor-pointer hover:opacity-80"
+                                  onClick={() => window.open(photo, '_blank')}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              {selectedComplaint.status === 'in_progress' && (
+                <div className="mt-6 flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowProgressModal(true);
+                    }}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+                  >
+                    + Add Progress Update
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleStatusUpdate(selectedComplaint._id, 'resolved');
+                      setSelectedComplaint(null);
+                    }}
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors"
+                  >
+                    Mark as Resolved
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

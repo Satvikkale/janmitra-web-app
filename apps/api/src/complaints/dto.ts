@@ -39,3 +39,10 @@ export class AssignComplaintDto {
   @IsString() @IsNotEmpty() assignedTo!: string;
   @IsString() @IsOptional() actorId?: string;
 }
+
+export class AddProgressUpdateDto {
+  @IsString() @IsNotEmpty() description!: string;
+  @IsArray() @IsOptional() photos?: string[];
+  @IsString() @IsOptional() updatedBy?: string;
+  @IsString() @IsOptional() updatedByName?: string;
+}

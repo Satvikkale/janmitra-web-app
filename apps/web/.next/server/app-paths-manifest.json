@@ -1,8 +1,7 @@
 {
-  "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/admin-dashboard/manage-societies/page": "app/admin-dashboard/manage-societies/page.js",
   "/admin-dashboard/manage-ngos/page": "app/admin-dashboard/manage-ngos/page.js",
-  "/auth/login/page": "app/auth/login/page.js",
-  "/ngo-dashboard/page": "app/ngo-dashboard/page.js",
-  "/page": "app/page.js"
+  "/ngo-users/page": "app/ngo-users/page.js",
+  "/admin-dashboard/page": "app/admin-dashboard/page.js",
+  "/admin-dashboard/ngo-analytics/page": "app/admin-dashboard/ngo-analytics/page.js",
+  "/auth/login/page": "app/auth/login/page.js"
 }

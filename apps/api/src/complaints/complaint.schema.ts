@@ -3,6 +3,18 @@ import { HydratedDocument } from 'mongoose';
 
 export type ComplaintDocument = HydratedDocument<Complaint>;
 export type ComplaintEventDocument = HydratedDocument<ComplaintEvent>;
+export type ProgressUpdateDocument = HydratedDocument<ProgressUpdate>;
+
+// Sub-document for day-wise progress updates
+@Schema({ timestamps: true })
+export class ProgressUpdate {
+  @Prop({ required: true }) date: Date;
+  @Prop({ required: true }) description: string;
+  @Prop([String]) photos?: string[];
+  @Prop({ required: true }) updatedBy: string;
+  @Prop() updatedByName?: string;
+}
+export const ProgressUpdateSchema = SchemaFactory.createForClass(ProgressUpdate);
 
 @Schema({ timestamps: true })
 export class Complaint {
@@ -19,6 +31,7 @@ export class Complaint {
   @Prop() severityScore?: number;
   @Prop() assignedTo?: string;
   @Prop({ type: { level: String, dueAt: Date } }) sla?: { level: string; dueAt: Date };
+  @Prop({ type: [ProgressUpdateSchema], default: [] }) progressUpdates: ProgressUpdate[];
 }
 export const ComplaintSchema = SchemaFactory.createForClass(Complaint);
 ComplaintSchema.index({ societyId: 1, status: 1, createdAt: -1 });

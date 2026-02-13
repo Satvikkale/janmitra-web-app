@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Complaint, ComplaintEvent } from './complaint.schema';
-import { AddCommentDto, AssignComplaintDto, CreateComplaintDto, ListQueryDto, UpdateStatusDto } from './dto';
+import { AddCommentDto, AddProgressUpdateDto, AssignComplaintDto, CreateComplaintDto, ListQueryDto, UpdateStatusDto } from './dto';
 import { RoutingService } from '../routing/routing.service';
 import { EventsGateway } from '../realtime/events.gateway';
 
@@ -85,5 +85,46 @@ export class ComplaintsService {
     });
     this.events.emitComplaintUpdated(doc as any);
     return doc;
+  }
+
+  async addProgressUpdate(id: string, dto: AddProgressUpdateDto) {
+    const progressUpdate = {
+      date: new Date(),
+      description: dto.description,
+      photos: dto.photos || [],
+      updatedBy: dto.updatedBy ?? 'u-dev-1',
+      updatedByName: dto.updatedByName,
+    };
+
+    const doc = await this.complaintModel.findByIdAndUpdate(
+      id,
+      { 
+        $push: { progressUpdates: progressUpdate },
+        updatedAt: new Date()
+      },
+      { new: true }
+    );
+    
+    if (!doc) return null;
+
+    await this.eventModel.create({
+      complaintId: String(doc._id),
+      type: 'note',
+      actorId: dto.updatedBy ?? 'u-dev-1',
+      payload: { 
+        type: 'progress_update',
+        description: dto.description,
+        photos: dto.photos || [],
+      }
+    });
+
+    this.events.emitComplaintUpdated(doc as any);
+    return doc;
+  }
+
+  async getProgressUpdates(id: string) {
+    const doc = await this.complaintModel.findById(id).select('progressUpdates').lean();
+    if (!doc) return null;
+    return doc.progressUpdates || [];
   }
 }
