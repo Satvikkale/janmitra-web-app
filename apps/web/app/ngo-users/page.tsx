@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState, useRef } from 'react';
-import { apiFetch } from '@/lib/auth';
+import { apiFetch, getImageUrl } from '@/lib/auth';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface NgoUserData {
@@ -234,16 +234,38 @@ export default function NGOUsers() {
     setShowProgressModal(true);
   };
 
+  const uploadImages = async (images: string[]): Promise<string[]> => {
+    if (images.length === 0) return [];
+    
+    try {
+      const response = await apiFetch('/uploads/images', {
+        method: 'POST',
+        body: JSON.stringify({ images, folder: 'progress' })
+      });
+      return response.urls;
+    } catch (err) {
+      console.error('Error uploading images:', err);
+      throw new Error('Failed to upload images');
+    }
+  };
+
   const handleSubmitProgress = async () => {
     if (!selectedComplaint || !progressForm.description.trim()) return;
     
     try {
       setSubmittingProgress(true);
+      
+      // Upload photos first and get URLs
+      let photoUrls: string[] = [];
+      if (progressForm.photos.length > 0) {
+        photoUrls = await uploadImages(progressForm.photos);
+      }
+      
       await apiFetch(`/complaints/${selectedComplaint._id}/progress`, {
         method: 'POST',
         body: JSON.stringify({
           description: progressForm.description,
-          photos: progressForm.photos
+          photos: photoUrls
         })
       });
       await fetchComplaints();
@@ -800,10 +822,10 @@ export default function NGOUsers() {
                               {update.photos.map((photo, photoIndex) => (
                                 <img
                                   key={photoIndex}
-                                  src={photo}
+                                  src={getImageUrl(photo)}
                                   alt={`Progress photo ${photoIndex + 1}`}
                                   className="w-full h-20 object-cover rounded-lg cursor-pointer hover:opacity-80"
-                                  onClick={() => window.open(photo, '_blank')}
+                                  onClick={() => window.open(getImageUrl(photo), '_blank')}
                                 />
                               ))}
                             </div>

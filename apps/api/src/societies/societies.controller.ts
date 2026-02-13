@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards, Delete } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -6,6 +6,8 @@ import { PlatformUserGuard } from '../auth/platform-user.guard';
 import { Society } from './society.schema';
 import { SocietyMembership } from './membership.schema';
 import { User } from '../users/user.schema';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 
 @UseGuards(JwtAuthGuard, PlatformUserGuard)
 @Controller('societies')
@@ -20,17 +22,51 @@ export class SocietiesController {
   async list(@Query('q') q?: string) {
     const filter: any = {};
     if (q) filter.name = { $regex: q, $options: 'i' };
-    return this.soc.find(filter).sort({ createdAt: -1 }).limit(100).lean();
+    const societies = await this.soc.find(filter).sort({ createdAt: -1 }).limit(100).lean();
+    
+    const pending = societies.filter(s => !s.isVerified);
+    const verified = societies.filter(s => s.isVerified);
+    
+    return { pending, verified, all: societies };
   }
 
   @Get(':id')
   get(@Param('id') id: string) { return this.soc.findById(id).lean(); }
 
   @Post()
-  async create(@Req() req: any, @Body() body: { name: string }) {
-    const s = await this.soc.create({ name: body.name, headUserSub: req.user.sub });
+  async create(@Req() req: any, @Body() body: { name: string; address?: string; contactPerson?: string; contactPhone?: string; description?: string }) {
+    const s = await this.soc.create({ 
+      name: body.name, 
+      headUserSub: req.user.sub,
+      address: body.address,
+      contactPerson: body.contactPerson,
+      contactPhone: body.contactPhone,
+      description: body.description,
+      isVerified: false 
+    });
     await this.mem.create({ societyId: String(s._id), userSub: req.user.sub, role: 'society_head', status: 'approved' });
     return s;
+  }
+
+  @Post('verify')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async verify(@Body() body: { societyId: string }) {
+    const society = await this.soc.findByIdAndUpdate(
+      body.societyId,
+      { isVerified: true },
+      { new: true }
+    ).lean();
+    return { ok: true, society };
+  }
+
+  @Post('reject')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async reject(@Body() body: { societyId: string }) {
+    await this.soc.findByIdAndDelete(body.societyId);
+    await this.mem.deleteMany({ societyId: body.societyId });
+    return { ok: true };
   }
 
   @Post(':id/join')

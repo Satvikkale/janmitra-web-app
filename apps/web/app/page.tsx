@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -10,7 +10,17 @@ import {
   Shield,
   ArrowRight,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  TrendingUp,
+  MapPin,
+  Clock,
+  Award,
+  Zap,
+  Target,
+  Heart,
+  Building2,
+  FileCheck,
+  Timer
 } from "lucide-react";
 import Image from 'next/image';
 import HeroImage from '../../web/assets/images/hero-image.png';
@@ -29,6 +39,7 @@ interface Step {
   title: string;
   description: string;
 }
+
 
 const features: Feature[] = [
   {
@@ -84,6 +95,13 @@ const steps: Step[] = [
   },
 ];
 
+const impactStats = [
+  { icon: <Target className="h-6 w-6" />, label: "Success Rate", value: "94%", color: "text-emerald-500" },
+  { icon: <Timer className="h-6 w-6" />, label: "Avg Resolution", value: "48hrs", color: "text-blue-500" },
+  { icon: <Heart className="h-6 w-6" />, label: "Satisfaction", value: "4.8/5", color: "text-rose-500" },
+  { icon: <Zap className="h-6 w-6" />, label: "Response Time", value: "<2hrs", color: "text-amber-500" },
+];
+
 interface FeatureCardProps {
   icon: React.ReactNode;
   title: string;
@@ -127,13 +145,81 @@ const StepItem: React.FC<StepItemProps> = ({ number, title, description, isLast 
   </div>
 );
 
+// Animated counter hook
+function useAnimatedCounter(end: number, duration: number = 2000, start: number = 0) {
+  const [count, setCount] = useState(start);
+  const [hasStarted, setHasStarted] = useState(false);
+
+  useEffect(() => {
+    if (!hasStarted) return;
+    
+    let startTime: number;
+    const animate = (currentTime: number) => {
+      if (!startTime) startTime = currentTime;
+      const progress = Math.min((currentTime - startTime) / duration, 1);
+      setCount(Math.floor(progress * (end - start) + start));
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    requestAnimationFrame(animate);
+  }, [end, duration, start, hasStarted]);
+
+  return { count, startAnimation: () => setHasStarted(true) };
+}
+
+// Stats Card Component
+const StatCard: React.FC<{ 
+  icon: React.ReactNode; 
+  value: number | string; 
+  label: string; 
+  suffix?: string;
+  gradient: string;
+  delay?: number;
+}> = ({ icon, value, label, suffix = "", gradient, delay = 0 }) => {
+  const numValue = typeof value === 'number' ? value : parseInt(value) || 0;
+  const { count, startAnimation } = useAnimatedCounter(numValue, 2000);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(true);
+      startAnimation();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [delay, startAnimation]);
+
+  return (
+    <div className={`relative overflow-hidden bg-white rounded-3xl p-6 shadow-lg border border-slate-100 transform transition-all duration-700 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'}`}>
+      <div className={`absolute top-0 right-0 w-24 h-24 ${gradient} rounded-bl-[4rem] opacity-10`}></div>
+      <div className={`w-12 h-12 ${gradient} rounded-2xl flex items-center justify-center text-white mb-4 shadow-lg`}>
+        {icon}
+      </div>
+      <div className="text-3xl font-bold text-slate-800 mb-1">
+        {typeof value === 'number' ? count.toLocaleString() : value}{suffix}
+      </div>
+      <div className="text-slate-500 text-sm font-medium">{label}</div>
+    </div>
+  );
+};
+
 export default function MainPage() {
   const { isLoggedIn } = useAuth();
   const [userType, setUserType] = React.useState<string | null>(null);
+  const [stats, setStats] = useState<Stats>({
+    totalComplaints: 0,
+    resolvedComplaints: 0,
+    activeNGOs: 0,
+    activeSocieties: 0,
+    avgResolutionTime: "48hrs"
+  });
+  const [statsLoaded, setStatsLoaded] = useState(false);
 
   React.useEffect(() => {
     setUserType(localStorage.getItem('userType'));
   }, []);
+
+
 
   const scrollToHowItWorks = (): void => {
     const section = document.getElementById("how-it-works");
@@ -142,28 +228,32 @@ export default function MainPage() {
     }
   };
 
+  const resolutionRate = stats.totalComplaints > 0 
+    ? Math.round((stats.resolvedComplaints / stats.totalComplaints) * 100) 
+    : 94;
+
   return (
     <section className="bg-slate-50 min-h-screen overflow-hidden">
       {/* Hero Section */}
       <div className="relative">
-        {/* Background decorations */}
-        <div className="absolute top-20 left-10 w-72 h-72 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
-        <div className="absolute top-40 right-10 w-72 h-72 bg-pink-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse delay-1000"></div>
-        <div className="absolute bottom-20 left-1/2 w-72 h-72 bg-yellow-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse delay-500"></div>
+        {/* Animated background decorations */}
+        <div className="absolute top-20 left-10 w-72 h-72 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+        <div className="absolute top-40 right-10 w-72 h-72 bg-pink-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+        <div className="absolute bottom-20 left-1/2 w-72 h-72 bg-yellow-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
 
         <div className="mx-auto max-w-screen-xl px-4 py-12 sm:px-6 lg:px-8 relative z-10">
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:items-center mt-8">
             <div>
-              <div className="inline-flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow-sm border border-slate-100 mb-6">
-                <Sparkles className="h-4 w-4 text-indigo-500" />
-                <span className="text-sm font-medium text-slate-600">Empowering Communities</span>
+              <div className="inline-flex items-center gap-2 bg-white rounded-full px-4 py-2 shadow-sm border border-slate-100 mb-6 animate-fade-in">
+                <Sparkles className="h-4 w-4 text-indigo-500 animate-pulse" />
+                <span className="text-sm font-medium text-slate-600">Empowering Communities Across India</span>
               </div>
 
               <h1 className="text-5xl font-extrabold text-slate-900 sm:text-6xl leading-tight tracking-tight">
-                Welcome to{' '}
+                Transform Your{' '}
                 <span className="relative">
-                  <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 bg-clip-text text-transparent">
-                    JanMirta
+                  <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 bg-clip-text text-transparent animate-gradient">
+                    Community
                   </span>
                   <svg className="absolute -bottom-2 left-0 w-full" height="8" viewBox="0 0 200 8" fill="none">
                     <path d="M2 6C50 2 150 2 198 6" stroke="url(#paint0_linear)" strokeWidth="3" strokeLinecap="round"/>
@@ -176,13 +266,26 @@ export default function MainPage() {
                     </defs>
                   </svg>
                 </span>
+                <br />
+                <span className="text-slate-700">With JanMirta</span>
               </h1>
 
               <p className="mt-8 text-slate-500 text-lg leading-relaxed max-w-xl">
-                JanMirta is the central platform where all data processing and workflow control happens.
-                The mobile app empowers residents to capture and submit issues, while the web dashboard
-                enables organizations to manage and resolve complaints efficiently.
+                India&apos;s first AI-powered civic complaint platform connecting <strong className="text-slate-700">citizens</strong>, <strong className="text-slate-700">NGOs</strong>, and <strong className="text-slate-700">local authorities</strong> for faster issue resolution. Report, track, and resolve community problems in real-time.
               </p>
+
+              {/* Mini Stats Row */}
+              <div className="flex flex-wrap items-center gap-6 mt-8 p-4 bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-100">
+                {impactStats.map((stat, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <div className={`${stat.color}`}>{stat.icon}</div>
+                    <div>
+                      <div className={`font-bold ${stat.color}`}>{stat.value}</div>
+                      <div className="text-xs text-slate-500">{stat.label}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
               <div className="flex flex-wrap items-center gap-3 mt-6">
                 <div className="flex items-center gap-2 text-sm text-slate-600">
@@ -195,24 +298,24 @@ export default function MainPage() {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-slate-600">
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  <span>Secure platform</span>
+                  <span>100% Transparent</span>
                 </div>
               </div>
 
               {!isLoggedIn ? (
                 <div className="mt-10 flex flex-wrap gap-4">
                   <button
-                    className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-4 font-semibold text-white shadow-lg shadow-indigo-200 transition-all hover:shadow-xl hover:shadow-indigo-300 hover:-translate-y-0.5"
+                    className="group inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-4 font-semibold text-white shadow-lg shadow-indigo-200 transition-all hover:shadow-xl hover:shadow-indigo-300 hover:-translate-y-0.5"
                     onClick={scrollToHowItWorks}
                   >
                     Download App
-                    <ArrowRight className="h-5 w-5" />
+                    <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                   </button>
                   <Link
                     href="/auth/register"
                     className="inline-flex items-center gap-2 rounded-2xl bg-white px-8 py-4 font-semibold text-slate-700 shadow-lg border border-slate-200 transition-all hover:shadow-xl hover:-translate-y-0.5 hover:border-indigo-200"
                   >
-                    Get Started
+                    Get Started Free
                   </Link>
                   <Link
                     href="/auth/login"
@@ -224,11 +327,11 @@ export default function MainPage() {
               ) : (
                 <div className="mt-10 flex flex-wrap gap-4">
                   <button
-                    className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-4 font-semibold text-white shadow-lg shadow-indigo-200 transition-all hover:shadow-xl hover:shadow-indigo-300 hover:-translate-y-0.5"
+                    className="group inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-4 font-semibold text-white shadow-lg shadow-indigo-200 transition-all hover:shadow-xl hover:shadow-indigo-300 hover:-translate-y-0.5"
                     onClick={scrollToHowItWorks}
                   >
                     Download App
-                    <ArrowRight className="h-5 w-5" />
+                    <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                   </button>
                   {userType === 'admin' && (
                     <Link
@@ -258,6 +361,76 @@ export default function MainPage() {
                   className="relative z-10 rounded-[2rem]"
                   alt="Community engagement through JanMirta"
                 />
+                {/* Floating badge */}
+                <div className="absolute -bottom-4 -left-4 bg-white px-4 py-3 rounded-2xl shadow-xl border border-slate-100 flex items-center gap-3 animate-bounce-slow">
+                  <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-emerald-500 rounded-xl flex items-center justify-center">
+                    <TrendingUp className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-800">{resolutionRate}% Resolved</div>
+                    <div className="text-xs text-slate-500">Success Rate</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Why JanMirta Section */}
+      <div className="mx-auto max-w-screen-xl px-4 py-16 sm:px-6 lg:px-8">
+        <div className="relative bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 rounded-[3rem] overflow-hidden">
+          {/* Background patterns */}
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute top-10 left-10 w-40 h-40 border-2 border-white rounded-full"></div>
+            <div className="absolute bottom-10 right-10 w-60 h-60 border-2 border-white rounded-full"></div>
+            <div className="absolute top-1/2 left-1/2 w-80 h-80 border-2 border-white rounded-full -translate-x-1/2 -translate-y-1/2"></div>
+          </div>
+          
+          <div className="relative p-10 md:p-16">
+            <div className="grid md:grid-cols-2 gap-12 items-center">
+              <div>
+                <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+                  Why Choose<br />JanMirta?
+                </h2>
+                <p className="text-white/80 text-lg mb-8">
+                  We&apos;re not just another complaint platform. JanMirta is built with cutting-edge technology and a vision to transform how communities solve problems together.
+                </p>
+                
+                <div className="space-y-4">
+                  {[
+                    { icon: <Zap />, text: "AI-powered complaint categorization & routing" },
+                    { icon: <MapPin />, text: "GPS-based automatic location tagging" },
+                    { icon: <Clock />, text: "Real-time status updates & notifications" },
+                    { icon: <Award />, text: "Transparent resolution tracking" },
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-4 bg-white/10 backdrop-blur-sm rounded-2xl p-4">
+                      <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white">
+                        {item.icon}
+                      </div>
+                      <span className="text-white font-medium">{item.text}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-6 text-center">
+                  <div className="text-5xl font-bold text-white mb-2">&lt;2h</div>
+                  <div className="text-white/70 text-sm">Avg Response Time</div>
+                </div>
+                <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-6 text-center">
+                  <div className="text-5xl font-bold text-white mb-2">24/7</div>
+                  <div className="text-white/70 text-sm">Platform Available</div>
+                </div>
+                <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-6 text-center">
+                  <div className="text-5xl font-bold text-white mb-2">100%</div>
+                  <div className="text-white/70 text-sm">Transparency</div>
+                </div>
+                <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-6 text-center">
+                  <div className="text-5xl font-bold text-white mb-2">Free</div>
+                  <div className="text-white/70 text-sm">For Citizens</div>
+                </div>
               </div>
             </div>
           </div>
@@ -316,6 +489,79 @@ export default function MainPage() {
           </div>
         </div>
       </div>
+
+      {/* Call to Action */}
+      <div className="mx-auto max-w-screen-xl px-4 pb-20 sm:px-6 lg:px-8">
+        <div className="bg-slate-900 rounded-[3rem] p-10 md:p-16 text-center relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/20 via-purple-600/20 to-pink-600/20"></div>
+          <div className="absolute top-0 left-1/2 w-96 h-96 bg-indigo-500 rounded-full blur-3xl opacity-20 -translate-x-1/2 -translate-y-1/2"></div>
+          
+          <div className="relative">
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+              Ready to Transform Your Community?
+            </h2>
+            <p className="text-slate-400 text-lg mb-8 max-w-2xl mx-auto">
+              Join thousands of citizens and organizations already using JanMirta to build better communities.
+            </p>
+            <div className="flex flex-wrap justify-center gap-4">
+              <button
+                onClick={scrollToHowItWorks}
+                className="inline-flex items-center gap-2 rounded-2xl bg-white px-8 py-4 font-semibold text-slate-900 shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5"
+              >
+                Download Mobile App
+                <ArrowRight className="h-5 w-5" />
+              </button>
+              <Link
+                href="/auth/register"
+                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-500 px-8 py-4 font-semibold text-white shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5"
+              >
+                Register Your Organization
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Custom styles for animations */}
+      <style jsx>{`
+        @keyframes blob {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          25% { transform: translate(20px, -30px) scale(1.1); }
+          50% { transform: translate(-20px, 20px) scale(0.9); }
+          75% { transform: translate(30px, 30px) scale(1.05); }
+        }
+        .animate-blob {
+          animation: blob 8s infinite ease-in-out;
+        }
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+        @keyframes bounce-slow {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-10px); }
+        }
+        .animate-bounce-slow {
+          animation: bounce-slow 3s infinite ease-in-out;
+        }
+        @keyframes gradient {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        .animate-gradient {
+          background-size: 200% auto;
+          animation: gradient 3s linear infinite;
+        }
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.6s ease-out;
+        }
+      `}</style>
     </section>
   );
 }

@@ -1,10 +1,20 @@
 export const API = process.env.NEXT_PUBLIC_API_BASE!;
+export const API_BASE = API.replace(/\/v1$/, ''); // Base URL without /v1
 export const tokenKey = 'jm_access';
 export const refreshKey = 'jm_refresh';
 
 export function getAccessToken() { if (typeof window === 'undefined') return null; return localStorage.getItem(tokenKey); }
 export function setTokens(a: string, r: string) { localStorage.setItem(tokenKey, a); localStorage.setItem(refreshKey, r); }
 export function clearTokens() { localStorage.removeItem(tokenKey); localStorage.removeItem(refreshKey); }
+
+// Helper to get full image URL from relative path
+export function getImageUrl(path: string): string {
+  if (!path) return '';
+  // If it's already a full URL (http/https or data URL), return as is
+  if (path.startsWith('http') || path.startsWith('data:')) return path;
+  // Otherwise, prepend the API base URL
+  return `${API_BASE}${path}`;
+}
 
 export async function apiFetch(path: string, init?: RequestInit) {
   const token = getAccessToken();

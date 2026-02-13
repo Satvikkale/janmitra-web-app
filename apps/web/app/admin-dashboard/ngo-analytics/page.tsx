@@ -39,6 +39,7 @@ interface Society {
   _id: string;
   name: string;
   createdAt: string;
+  isVerified?: boolean;
 }
 
 interface Complaint {
@@ -52,7 +53,7 @@ interface Complaint {
 
 interface AnalyticsData {
   ngos: { pending: NGO[]; verified: NGO[] };
-  societies: Society[];
+  societies: { pending: Society[]; verified: Society[] };
   complaints: Complaint[];
 }
 
@@ -144,7 +145,7 @@ export default function NGOAnalytics() {
 
     let filteredComplaints = [...data.complaints];
     let filteredNGOs = [...(data.ngos.pending || []), ...(data.ngos.verified || [])];
-    let filteredSocieties = [...data.societies];
+    let filteredSocieties = [...(data.societies.pending || []), ...(data.societies.verified || [])];
 
     // Date filter
     if (filters.dateFrom) {
@@ -451,7 +452,7 @@ export default function NGOAnalytics() {
   // Use filtered data for display when filters are active
   const displayComplaints = filteredData?.complaints || data.complaints;
   const displayNGOs = filteredData?.ngos || [...(data.ngos.pending || []), ...(data.ngos.verified || [])];
-  const displaySocieties = filteredData?.societies || data.societies;
+  const displaySocieties = filteredData?.societies || [...(data.societies.pending || []), ...(data.societies.verified || [])];
 
   const totalNGOs = displayNGOs.length;
   const verifiedNGOs = displayNGOs.filter(n => n.isVerified).length;

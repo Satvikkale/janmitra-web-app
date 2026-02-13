@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { apiFetch } from '@/lib/auth';
+import { apiFetch, getImageUrl } from '@/lib/auth';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface NGOProfile {
@@ -60,6 +60,15 @@ interface NgoEmployee {
   updatedAt: string;
 }
 
+interface ProgressUpdate {
+  _id: string;
+  date: string;
+  description: string;
+  photos: string[];
+  updatedBy: string;
+  updatedByName: string;
+}
+
 export default function NgoDashboard() {
   const [profile, setProfile] = useState<NGOProfile | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
@@ -93,6 +102,10 @@ export default function NgoDashboard() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
   const [assigningComplaint, setAssigningComplaint] = useState(false);
+  const [showProgressModal, setShowProgressModal] = useState(false);
+  const [progressUpdates, setProgressUpdates] = useState<ProgressUpdate[]>([]);
+  const [loadingProgress, setLoadingProgress] = useState(false);
+  const [selectedProgressComplaint, setSelectedProgressComplaint] = useState<any>(null);
   const { isLoggedIn } = useAuth();
 
   const fetchProfile = async () => {
@@ -163,6 +176,21 @@ export default function NgoDashboard() {
   const openAssignModal = (complaint: any) => {
     setSelectedComplaint(complaint);
     setShowAssignModal(true);
+  };
+
+  const fetchProgressUpdates = async (complaint: any) => {
+    try {
+      setLoadingProgress(true);
+      setSelectedProgressComplaint(complaint);
+      const data = await apiFetch(`/complaints/${complaint._id}/progress`);
+      setProgressUpdates(data);
+      setShowProgressModal(true);
+    } catch (err: any) {
+      console.error('Error fetching progress updates:', err);
+      setError('Failed to fetch progress updates');
+    } finally {
+      setLoadingProgress(false);
+    }
   };
 
   const triggerEventStatusUpdate = async () => {
@@ -389,7 +417,7 @@ export default function NgoDashboard() {
 
         {/* Complaints Tab */}
         {activeTab === 'complaints' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-medium text-slate-800">Complaints</h2>
               <button
@@ -405,60 +433,240 @@ export default function NgoDashboard() {
                 No complaints assigned yet.
               </div>
             ) : (
-              <div className="grid gap-4">
-                {complaints.map((complaint) => {
-                  const assignedEmployee = employees.find(e => e._id === complaint.assignedTo);
-                  return (
-                    <div key={complaint._id} className="bg-white rounded-lg p-4 shadow-sm">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-medium text-slate-800">{complaint.category}</span>
-                            {complaint.subcategory && (
-                              <span className="text-slate-400 text-sm">/ {complaint.subcategory}</span>
+              <>
+                {/* Unresolved Complaints Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-medium text-slate-700">Unresolved</h3>
+                    <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                      {complaints.filter(c => c.status !== 'resolved').length}
+                    </span>
+                  </div>
+                  {complaints.filter(c => c.status !== 'resolved').length === 0 ? (
+                    <div className="bg-white rounded-lg p-6 text-center text-slate-500 text-sm">
+                      No unresolved complaints.
+                    </div>
+                  ) : (
+                    <div className="grid gap-4">
+                      {complaints.filter(c => c.status !== 'resolved').map((complaint) => {
+                        const assignedEmployee = employees.find(e => e._id === complaint.assignedTo);
+                        return (
+                          <div key={complaint._id} className="bg-white rounded-lg p-4 shadow-sm border-l-4 border-amber-400">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="font-medium text-slate-800">{complaint.category}</span>
+                                  {complaint.subcategory && (
+                                    <span className="text-slate-400 text-sm">/ {complaint.subcategory}</span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-slate-600 mb-3">{complaint.description || 'No description'}</p>
+                                <div className="flex flex-wrap gap-2">
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    complaint.status === 'open' ? 'bg-amber-50 text-amber-700' :
+                                    complaint.status === 'assigned' ? 'bg-sky-50 text-sky-700' :
+                                    complaint.status === 'in_progress' ? 'bg-violet-50 text-violet-700' :
+                                    'bg-slate-100 text-slate-600'
+                                  }`}>
+                                    {complaint.status?.replace('_', ' ')}
+                                  </span>
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    complaint.priority === 'high' ? 'bg-rose-50 text-rose-700' :
+                                    complaint.priority === 'med' ? 'bg-orange-50 text-orange-700' :
+                                    'bg-emerald-50 text-emerald-700'
+                                  }`}>
+                                    {complaint.priority}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <p className="text-xs text-slate-500">Assigned to</p>
+                                  <p className="text-sm font-medium text-slate-700">
+                                    {assignedEmployee?.name || 'Unassigned'}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => openAssignModal(complaint)}
+                                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm"
+                                >
+                                  {complaint.assignedTo ? 'Reassign' : 'Assign'}
+                                </button>
+                                {complaint.status === 'in_progress' && (
+                                  <button
+                                    onClick={() => fetchProgressUpdates(complaint)}
+                                    className="bg-violet-100 hover:bg-violet-200 text-violet-700 px-3 py-2 rounded-lg text-sm"
+                                  >
+                                    View Progress
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {complaint.progressUpdates && complaint.progressUpdates.length > 0 && (
+                              <div className="mt-3 pt-3 border-t border-slate-100">
+                                <span className="text-xs text-violet-600 font-medium">
+                                  {complaint.progressUpdates.length} progress update{complaint.progressUpdates.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
                             )}
                           </div>
-                          <p className="text-sm text-slate-600 mb-3">{complaint.description || 'No description'}</p>
-                          <div className="flex flex-wrap gap-2">
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              complaint.status === 'open' ? 'bg-amber-50 text-amber-700' :
-                              complaint.status === 'assigned' ? 'bg-sky-50 text-sky-700' :
-                              complaint.status === 'in_progress' ? 'bg-violet-50 text-violet-700' :
-                              complaint.status === 'resolved' ? 'bg-emerald-50 text-emerald-700' :
-                              'bg-slate-100 text-slate-600'
-                            }`}>
-                              {complaint.status?.replace('_', ' ')}
-                            </span>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              complaint.priority === 'high' ? 'bg-rose-50 text-rose-700' :
-                              complaint.priority === 'med' ? 'bg-orange-50 text-orange-700' :
-                              'bg-emerald-50 text-emerald-700'
-                            }`}>
-                              {complaint.priority}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="text-xs text-slate-500">Assigned to</p>
-                            <p className="text-sm font-medium text-slate-700">
-                              {assignedEmployee?.name || 'Unassigned'}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => openAssignModal(complaint)}
-                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm"
-                          >
-                            {complaint.assignedTo ? 'Reassign' : 'Assign'}
-                          </button>
-                        </div>
-                      </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
+                  )}
+                </div>
+
+                {/* Resolved Complaints Section */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-medium text-slate-700">Resolved</h3>
+                    <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                      {complaints.filter(c => c.status === 'resolved').length}
+                    </span>
+                  </div>
+                  {complaints.filter(c => c.status === 'resolved').length === 0 ? (
+                    <div className="bg-white rounded-lg p-6 text-center text-slate-500 text-sm">
+                      No resolved complaints yet.
+                    </div>
+                  ) : (
+                    <div className="grid gap-4">
+                      {complaints.filter(c => c.status === 'resolved').map((complaint) => {
+                        const assignedEmployee = employees.find(e => e._id === complaint.assignedTo);
+                        return (
+                          <div key={complaint._id} className="bg-white rounded-lg p-4 shadow-sm border-l-4 border-emerald-400">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="font-medium text-slate-800">{complaint.category}</span>
+                                  {complaint.subcategory && (
+                                    <span className="text-slate-400 text-sm">/ {complaint.subcategory}</span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-slate-600 mb-3">{complaint.description || 'No description'}</p>
+                                <div className="flex flex-wrap gap-2">
+                                  <span className="px-2 py-1 rounded text-xs font-medium bg-emerald-50 text-emerald-700">
+                                    resolved
+                                  </span>
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    complaint.priority === 'high' ? 'bg-rose-50 text-rose-700' :
+                                    complaint.priority === 'med' ? 'bg-orange-50 text-orange-700' :
+                                    'bg-emerald-50 text-emerald-700'
+                                  }`}>
+                                    {complaint.priority}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <p className="text-xs text-slate-500">Resolved by</p>
+                                  <p className="text-sm font-medium text-slate-700">
+                                    {assignedEmployee?.name || 'Unknown'}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => fetchProgressUpdates(complaint)}
+                                  className="bg-violet-100 hover:bg-violet-200 text-violet-700 px-3 py-2 rounded-lg text-sm"
+                                >
+                                  View Progress
+                                </button>
+                              </div>
+                            </div>
+                            {complaint.progressUpdates && complaint.progressUpdates.length > 0 && (
+                              <div className="mt-3 pt-3 border-t border-slate-100">
+                                <span className="text-xs text-violet-600 font-medium">
+                                  {complaint.progressUpdates.length} progress update{complaint.progressUpdates.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </motion.div>
+        )}
+
+        {/* Progress Modal */}
+        {showProgressModal && selectedProgressComplaint && (
+          <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-800">Progress Updates</h2>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {selectedProgressComplaint.category}
+                    {selectedProgressComplaint.subcategory && ` / ${selectedProgressComplaint.subcategory}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setShowProgressModal(false); setSelectedProgressComplaint(null); setProgressUpdates([]); }}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {loadingProgress ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-violet-500 border-t-transparent"></div>
+                </div>
+              ) : progressUpdates.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  No progress updates yet.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {progressUpdates.map((update, index) => (
+                    <div key={update._id || index} className="relative pl-6 pb-6 border-l-2 border-violet-200 last:pb-0">
+                      {/* Timeline dot */}
+                      <div className="absolute left-[-9px] top-0 w-4 h-4 rounded-full bg-violet-500 border-2 border-white"></div>
+                      
+                      <div className="bg-slate-50 rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <p className="text-sm font-medium text-slate-700">{update.updatedByName || 'NGO Employee'}</p>
+                          <p className="text-xs text-slate-500">{formatDate(update.date)}</p>
+                        </div>
+                        <p className="text-sm text-slate-600 mb-3">{update.description}</p>
+                        
+                        {/* Photos */}
+                        {update.photos && update.photos.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {update.photos.map((photo, photoIndex) => (
+                              <a
+                                key={photoIndex}
+                                href={getImageUrl(photo)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block"
+                              >
+                                <img
+                                  src={getImageUrl(photo)}
+                                  alt={`Progress photo ${photoIndex + 1}`}
+                                  className="w-20 h-20 object-cover rounded-lg border border-slate-200 hover:border-violet-400 transition-colors"
+                                />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                onClick={() => { setShowProgressModal(false); setSelectedProgressComplaint(null); setProgressUpdates([]); }}
+                className="mt-6 w-full py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Assign Modal */}

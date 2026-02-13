@@ -1,7 +1,4 @@
 {
-  "/admin-dashboard/manage-ngos/page": "app/admin-dashboard/manage-ngos/page.js",
-  "/ngo-users/page": "app/ngo-users/page.js",
-  "/admin-dashboard/page": "app/admin-dashboard/page.js",
-  "/admin-dashboard/ngo-analytics/page": "app/admin-dashboard/ngo-analytics/page.js",
-  "/auth/login/page": "app/auth/login/page.js"
+  "/favicon.ico/route": "app/favicon.ico/route.js",
+  "/page": "app/page.js"
 }
