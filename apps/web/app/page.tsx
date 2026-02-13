@@ -206,13 +206,6 @@ const StatCard: React.FC<{
 export default function MainPage() {
   const { isLoggedIn } = useAuth();
   const [userType, setUserType] = React.useState<string | null>(null);
-  const [stats, setStats] = useState<Stats>({
-    totalComplaints: 0,
-    resolvedComplaints: 0,
-    activeNGOs: 0,
-    activeSocieties: 0,
-    avgResolutionTime: "48hrs"
-  });
   const [statsLoaded, setStatsLoaded] = useState(false);
 
   React.useEffect(() => {
@@ -228,9 +221,6 @@ export default function MainPage() {
     }
   };
 
-  const resolutionRate = stats.totalComplaints > 0 
-    ? Math.round((stats.resolvedComplaints / stats.totalComplaints) * 100) 
-    : 94;
 
   return (
     <section className="bg-slate-50 min-h-screen overflow-hidden">
@@ -361,16 +351,6 @@ export default function MainPage() {
                   className="relative z-10 rounded-[2rem]"
                   alt="Community engagement through JanMirta"
                 />
-                {/* Floating badge */}
-                <div className="absolute -bottom-4 -left-4 bg-white px-4 py-3 rounded-2xl shadow-xl border border-slate-100 flex items-center gap-3 animate-bounce-slow">
-                  <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-emerald-500 rounded-xl flex items-center justify-center">
-                    <TrendingUp className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-slate-800">{resolutionRate}% Resolved</div>
-                    <div className="text-xs text-slate-500">Success Rate</div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -522,46 +502,7 @@ export default function MainPage() {
         </div>
       </div>
 
-      {/* Custom styles for animations */}
-      <style jsx>{`
-        @keyframes blob {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          25% { transform: translate(20px, -30px) scale(1.1); }
-          50% { transform: translate(-20px, 20px) scale(0.9); }
-          75% { transform: translate(30px, 30px) scale(1.05); }
-        }
-        .animate-blob {
-          animation: blob 8s infinite ease-in-out;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-        @keyframes bounce-slow {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-10px); }
-        }
-        .animate-bounce-slow {
-          animation: bounce-slow 3s infinite ease-in-out;
-        }
-        @keyframes gradient {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-        .animate-gradient {
-          background-size: 200% auto;
-          animation: gradient 3s linear infinite;
-        }
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in {
-          animation: fade-in 0.6s ease-out;
-        }
-      `}</style>
+     
     </section>
   );
 }
