@@ -20,7 +20,10 @@ import {
   Heart,
   Building2,
   FileCheck,
-  Timer
+  Timer,
+  Calendar,
+  ChevronRight,
+  Megaphone
 } from "lucide-react";
 import Image from 'next/image';
 import HeroImage from '../../web/assets/images/hero-image.png';
@@ -38,6 +41,17 @@ interface Step {
   number: number;
   title: string;
   description: string;
+}
+
+interface EventItem {
+  _id: string;
+  title: string;
+  description: string;
+  date: string;
+  location: string;
+  status: string;
+  tags: string[];
+  imageUrl?: string;
 }
 
 
@@ -203,13 +217,93 @@ const StatCard: React.FC<{
   );
 };
 
+// Event Card Component
+const EventCard: React.FC<{ event: EventItem }> = ({ event }) => {
+  const eventDate = new Date(event.date);
+  const formattedDate = eventDate.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+  const formattedTime = eventDate.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  return (
+    <div className="group bg-white rounded-2xl p-5 shadow-sm hover:shadow-lg transition-all duration-300 border border-slate-100 hover:border-indigo-200">
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-xl p-3 text-center min-w-[60px]">
+          <div className="text-xs font-medium opacity-80">
+            {eventDate.toLocaleDateString('en-IN', { month: 'short' }).toUpperCase()}
+          </div>
+          <div className="text-2xl font-bold">{eventDate.getDate()}</div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-semibold text-slate-800 text-lg group-hover:text-indigo-600 transition-colors line-clamp-1">
+            {event.title}
+          </h4>
+          <p className="text-slate-500 text-sm mt-1 line-clamp-2">
+            {event.description}
+          </p>
+          <div className="flex flex-wrap items-center gap-3 mt-3 text-sm text-slate-500">
+            <div className="flex items-center gap-1">
+              <Clock className="h-4 w-4 text-indigo-500" />
+              {formattedTime}
+            </div>
+            <div className="flex items-center gap-1">
+              <MapPin className="h-4 w-4 text-rose-500" />
+              <span className="line-clamp-1">{event.location}</span>
+            </div>
+          </div>
+          {event.tags && event.tags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {event.tags.slice(0, 3).map((tag, idx) => (
+                <span
+                  key={idx}
+                  className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function MainPage() {
   const { isLoggedIn } = useAuth();
   const [userType, setUserType] = React.useState<string | null>(null);
   const [statsLoaded, setStatsLoaded] = useState(false);
+  const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
 
   React.useEffect(() => {
     setUserType(localStorage.getItem('userType'));
+  }, []);
+
+  // Fetch upcoming events
+  useEffect(() => {
+    const fetchUpcomingEvents = async () => {
+      try {
+        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:4000/v1';
+        const response = await fetch(`${API_BASE}/events/upcoming?limit=4`);
+        if (response.ok) {
+          const data = await response.json();
+          setUpcomingEvents(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch upcoming events:', error);
+      } finally {
+        setEventsLoading(false);
+      }
+    };
+
+    fetchUpcomingEvents();
   }, []);
 
 
@@ -357,6 +451,57 @@ export default function MainPage() {
         </div>
       </div>
 
+      {/* Upcoming Events Section */}
+      <div className="mx-auto max-w-screen-xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="relative bg-white rounded-[3rem] shadow-xl shadow-slate-200/50 overflow-hidden border border-slate-100">
+          {/* Background pattern */}
+          <div className="absolute top-0 left-0 w-1/3 h-full bg-gradient-to-r from-amber-50 via-orange-50 to-transparent"></div>
+          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-indigo-100 to-transparent rounded-bl-full opacity-50"></div>
+
+          <div className="relative p-8 md:p-12">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+              <div>
+                <div className="inline-flex items-center gap-2 bg-amber-50 rounded-full px-4 py-2 mb-3">
+                  <Megaphone className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-700">Notice Board</span>
+                </div>
+                <h2 className="text-3xl md:text-4xl font-bold text-slate-900">Upcoming Events</h2>
+                <p className="text-slate-500 mt-2">Stay updated with the latest community events and activities</p>
+              </div>
+            </div>
+
+            {eventsLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="bg-slate-50 rounded-2xl p-5 animate-pulse">
+                    <div className="flex items-start gap-4">
+                      <div className="w-16 h-16 bg-slate-200 rounded-xl"></div>
+                      <div className="flex-1">
+                        <div className="h-5 bg-slate-200 rounded w-3/4 mb-2"></div>
+                        <div className="h-4 bg-slate-200 rounded w-full mb-2"></div>
+                        <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : upcomingEvents.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {upcomingEvents.map((event) => (
+                  <EventCard key={event._id} event={event} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 bg-slate-50 rounded-2xl">
+                <Calendar className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-slate-600 mb-2">No Upcoming Events</h3>
+                <p className="text-slate-500">Check back later for new community events and activities.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Why JanMirta Section */}
       <div className="mx-auto max-w-screen-xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="relative bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 rounded-[3rem] overflow-hidden">
@@ -469,6 +614,7 @@ export default function MainPage() {
           </div>
         </div>
       </div>
+
 
       {/* Call to Action */}
       <div className="mx-auto max-w-screen-xl px-4 pb-20 sm:px-6 lg:px-8">
