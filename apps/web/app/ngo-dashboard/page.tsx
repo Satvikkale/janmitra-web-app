@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { apiFetch, getImageUrl } from '@/lib/auth';
 import { useAuth } from '@/contexts/AuthContext';
@@ -69,6 +69,25 @@ interface ProgressUpdate {
   updatedByName: string;
 }
 
+interface Notification {
+  _id: string;
+  recipientId: string;
+  recipientType: 'ngo' | 'ngo-user' | 'user';
+  type: 'complaint_received' | 'complaint_assigned' | 'complaint_updated' | 'complaint_resolved';
+  title: string;
+  message: string;
+  data?: {
+    complaintId?: string;
+    category?: string;
+    status?: string;
+    assignedBy?: string;
+    orgId?: string;
+  };
+  isRead: boolean;
+  readAt?: string;
+  createdAt: string;
+}
+
 export default function NgoDashboard() {
   const [profile, setProfile] = useState<NGOProfile | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
@@ -107,6 +126,13 @@ export default function NgoDashboard() {
   const [loadingProgress, setLoadingProgress] = useState(false);
   const [selectedProgressComplaint, setSelectedProgressComplaint] = useState<any>(null);
   const { isLoggedIn } = useAuth();
+
+  // Notification state
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
 
   const fetchProfile = async () => {
     try {
@@ -151,6 +177,99 @@ export default function NgoDashboard() {
       console.error('Error fetching complaints:', err);
       setError('Failed to fetch complaints data');
     }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      setLoadingNotifications(true);
+      const [notificationsData, countData] = await Promise.all([
+        apiFetch('/notifications'),
+        apiFetch('/notifications/unread/count')
+      ]);
+      setNotifications(notificationsData);
+      setUnreadCount(countData.count);
+    } catch (err: any) {
+      console.error('Error fetching notifications:', err);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      await apiFetch(`/notifications/${notificationId}/read`, { method: 'PATCH' });
+      setNotifications(prev =>
+        prev.map(n => n._id === notificationId ? { ...n, isRead: true } : n)
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err: any) {
+      console.error('Error marking notification as read:', err);
+    }
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    try {
+      await apiFetch('/notifications/read-all', { method: 'PATCH' });
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      setUnreadCount(0);
+    } catch (err: any) {
+      console.error('Error marking all notifications as read:', err);
+    }
+  };
+
+  // Close notifications dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'complaint_received':
+        return (
+          <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        );
+      case 'complaint_assigned':
+        return (
+          <svg className="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        );
+      case 'complaint_resolved':
+        return (
+          <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        );
+      default:
+        return (
+          <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+        );
+    }
+  };
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
   };
 
   const handleAssignComplaint = async (employeeId: string) => {
@@ -233,7 +352,7 @@ export default function NgoDashboard() {
 
   useEffect(() => {
     if (isLoggedIn) {
-      Promise.all([fetchProfile(), fetchEvents(), fetchEmployees(), fetchComplaints()])
+      Promise.all([fetchProfile(), fetchEvents(), fetchEmployees(), fetchComplaints(), fetchNotifications()])
         .finally(() => setLoading(false));
     }
   }, [isLoggedIn]);
@@ -374,12 +493,96 @@ export default function NgoDashboard() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
+          className="mb-6 flex justify-between items-start"
         >
-          <h1 className="text-2xl font-semibold text-slate-800">Dashboard</h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Welcome, {profile?.contactPersonName || 'NGO User'}
-          </p>
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-800">Dashboard</h1>
+            <p className="text-slate-500 text-sm mt-1">
+              Welcome, {profile?.contactPersonName || 'NGO User'}
+            </p>
+          </div>
+
+          {/* Notification Bell */}
+          <div className="relative" ref={notificationRef}>
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full font-medium">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {/* Notifications Dropdown */}
+            {showNotifications && (
+              <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-slate-200 z-50 max-h-96 overflow-hidden">
+                <div className="flex justify-between items-center p-4 border-b border-slate-200">
+                  <h3 className="font-semibold text-slate-900">Notifications</h3>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markAllNotificationsAsRead}
+                      className="text-sm text-teal-600 hover:text-teal-700"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+                
+                <div className="overflow-y-auto max-h-72">
+                  {loadingNotifications ? (
+                    <div className="p-4 text-center text-slate-500">
+                      <div className="animate-spin w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+                      Loading...
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="p-8 text-center text-slate-500">
+                      <svg className="w-12 h-12 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                      </svg>
+                      <p>No notifications yet</p>
+                    </div>
+                  ) : (
+                    notifications.map((notification) => (
+                      <div
+                        key={notification._id}
+                        onClick={() => !notification.isRead && markNotificationAsRead(notification._id)}
+                        className={`p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors ${
+                          !notification.isRead ? 'bg-teal-50' : ''
+                        }`}
+                      >
+                        <div className="flex gap-3">
+                          <div className="flex-shrink-0 mt-1">
+                            {getNotificationIcon(notification.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm ${!notification.isRead ? 'font-semibold text-slate-900' : 'text-slate-700'}`}>
+                              {notification.title}
+                            </p>
+                            <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">
+                              {notification.message}
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">
+                              {formatTimeAgo(notification.createdAt)}
+                            </p>
+                          </div>
+                          {!notification.isRead && (
+                            <div className="flex-shrink-0">
+                              <span className="w-2 h-2 bg-teal-500 rounded-full block"></span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </motion.div>
 
         {error && (

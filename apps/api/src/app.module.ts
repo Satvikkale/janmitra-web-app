@@ -18,6 +18,8 @@ import { RealtimeModule } from './realtime/realtime.module';
 
 import { ComplaintsModule } from './complaints/complaints.module';
 import { EventsModule } from './events/events.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { BlockchainModule } from './blockchain/blockchain.module';
 
 @Module({
   imports: [
@@ -34,6 +36,8 @@ import { EventsModule } from './events/events.module';
     RealtimeModule,
     ComplaintsModule,
     EventsModule,
+    NotificationsModule,
+    BlockchainModule,
   ],
   controllers: [HealthController],
 })

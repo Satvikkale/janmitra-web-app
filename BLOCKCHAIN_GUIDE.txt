@@ -1,0 +1,293 @@
+================================================================================
+                    BLOCKCHAIN INTEGRATION GUIDE - JanMitra
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. Overview
+2. How Blockchain is Used
+3. Where Blockchain is Used (Files)
+4. Smart Contract Details
+5. API Endpoints
+6. How to Activate Blockchain
+7. How It Works at Runtime
+8. Verification & Tamper Detection
+
+================================================================================
+1. OVERVIEW
+================================================================================
+
+JanMitra uses blockchain (Polygon Amoy testnet) to create an immutable,
+tamper-proof record of civic complaints. Every complaint filed, assigned,
+or updated is hashed and recorded on-chain so that no one can alter or
+delete complaint data without detection.
+
+Technology Stack:
+  - Blockchain Network : Polygon Amoy Testnet (Chain ID: 80002)
+  - Smart Contract     : Solidity 0.8.20 (ComplaintRegistry.sol)
+  - Backend Library    : ethers.js v6 (installed in apps/api)
+  - Cost               : FREE (testnet uses free test MATIC tokens)
+
+================================================================================
+2. HOW BLOCKCHAIN IS USED
+================================================================================
+
+There are 3 key moments when blockchain is triggered:
+
+a) COMPLAINT CREATED
+   - When a citizen files a new complaint
+   - The complaint data (category, description, reporterId, timestamp) is
+     hashed using SHA-256
+   - The hash + complaint ID are stored on-chain via fileComplaint()
+   - The blockchain transaction hash is saved back to MongoDB
+     (blockchainTxHash, blockchainHash fields)
+
+b) COMPLAINT ASSIGNED
+   - When an NGO assigns a complaint to an NGO user
+   - The assignment details (complaintId, orgId, assignedTo) are recorded
+     on-chain via assignComplaint()
+   - The transaction hash is saved back to MongoDB
+
+c) STATUS UPDATED
+   - When a complaint status changes (open → assigned → in_progress →
+     resolved → closed)
+   - The new status is recorded on-chain via updateStatus()
+   - The transaction hash is saved back to MongoDB
+
+IMPORTANT: All blockchain calls are NON-BLOCKING. The API responds
+immediately to the user, and blockchain recording happens in the
+background. If blockchain fails, the complaint still works normally.
+
+================================================================================
+3. WHERE BLOCKCHAIN IS USED (FILES)
+================================================================================
+
+BACKEND FILES (apps/api/src/):
+------------------------------
+
+  blockchain/blockchain.service.ts
+    - Core blockchain service
+    - Initializes ethers.js provider, wallet, and contract
+    - Methods:
+        isEnabled()                  → Check if blockchain is configured
+        generateComplaintHash()      → Create SHA-256 hash of complaint data
+        recordComplaintOnChain()     → Store complaint hash on-chain
+        recordAssignmentOnChain()    → Store assignment on-chain
+        recordStatusUpdateOnChain()  → Store status change on-chain
+        verifyComplaintIntegrity()   → Compare on-chain hash with expected hash
+        getOnChainRecord()           → Fetch complaint record from blockchain
+
+  blockchain/blockchain.controller.ts
+    - REST API endpoints for blockchain queries
+    - GET /v1/blockchain/status          → Check if blockchain is active
+    - GET /v1/blockchain/complaint/:id   → Get on-chain record (auth required)
+    - GET /v1/blockchain/verify/:id/:hash → Verify integrity (auth required)
+
+  blockchain/blockchain.module.ts
+    - NestJS module (marked @Global so BlockchainService is available everywhere)
+    - Imports UsersModule and SocietiesModule for auth guard support
+
+  complaints/complaint.schema.ts
+    - Added 2 new fields to the Complaint model:
+        blockchainTxHash  → Stores the transaction hash from blockchain
+        blockchainHash    → Stores the SHA-256 hash of the complaint data
+
+  complaints/complaints.service.ts
+    - Injects BlockchainService
+    - Calls blockchain in create(), assign(), and updateStatus() methods
+    - All calls are async/non-blocking using .then()
+
+  app.module.ts
+    - BlockchainModule is registered in the main app module
+
+SMART CONTRACT:
+---------------
+
+  contracts/ComplaintRegistry.sol
+    - Solidity smart contract deployed on Polygon Amoy
+    - Stores complaint hashes, assignments, and status updates
+    - Provides verification function to detect data tampering
+    - Events emitted: ComplaintFiled, ComplaintAssigned, StatusUpdated
+
+ENVIRONMENT VARIABLES:
+----------------------
+
+  apps/api/.env
+    - BLOCKCHAIN_RPC_URL          → Polygon Amoy RPC endpoint
+    - BLOCKCHAIN_PRIVATE_KEY      → Wallet private key for signing transactions
+    - COMPLAINT_CONTRACT_ADDRESS  → Deployed smart contract address
+
+================================================================================
+4. SMART CONTRACT DETAILS
+================================================================================
+
+Contract Name: ComplaintRegistry
+File: contracts/ComplaintRegistry.sol
+Solidity Version: ^0.8.20
+
+FUNCTIONS:
+  fileComplaint(complaintId, complaintHash)
+    → Records a new complaint on-chain with its data hash
+
+  assignComplaint(complaintId, orgId, assignedTo)
+    → Records that a complaint has been assigned to an NGO user
+
+  updateStatus(complaintId, newStatus)
+    → Records a status change (0=Open, 1=Assigned, 2=InProgress,
+      3=Resolved, 4=Closed)
+
+  verifyComplaint(complaintId, expectedHash) → returns bool
+    → Compares on-chain hash with the provided hash to check integrity
+
+  complaints(complaintId) → returns struct
+    → Public mapping to read complaint data directly
+
+EVENTS:
+  ComplaintFiled(complaintId, complaintHash, timestamp)
+  ComplaintAssigned(complaintId, orgId, assignedTo, timestamp)
+  StatusUpdated(complaintId, newStatus, timestamp)
+
+================================================================================
+5. API ENDPOINTS
+================================================================================
+
+All endpoints use the /v1 prefix.
+
+GET /v1/blockchain/status
+  - No authentication required
+  - Returns: { enabled: true/false, message: "..." }
+  - Use this to check if blockchain is active
+
+GET /v1/blockchain/complaint/:id
+  - Requires JWT authentication
+  - Returns the on-chain record for a complaint
+  - Response: { found: true, record: { complaintHash, filedBy, orgId,
+    assignedTo, status, createdAt, lastUpdatedAt } }
+
+GET /v1/blockchain/verify/:id/:hash
+  - Requires JWT authentication
+  - Verifies if complaint data matches on-chain hash
+  - Response: { complaintId, isValid: true/false }
+
+================================================================================
+6. HOW TO ACTIVATE BLOCKCHAIN
+================================================================================
+
+STEP 1: Install MetaMask
+  - Go to https://metamask.io (FREE)
+  - Install browser extension
+  - Create a new wallet (save your seed phrase securely!)
+
+STEP 2: Add Polygon Amoy Network to MetaMask
+  - Open MetaMask → Settings → Networks → Add Network
+  - Network Name    : Polygon Amoy
+  - RPC URL         : https://rpc-amoy.polygon.technology
+  - Chain ID        : 80002
+  - Currency Symbol : MATIC
+  - Block Explorer  : https://amoy.polygonscan.com
+
+STEP 3: Get Free Test MATIC
+  - Go to https://faucet.polygon.technology/
+  - Select "Amoy" testnet
+  - Paste your MetaMask wallet address
+  - Click "Submit" → You'll receive free test MATIC
+
+STEP 4: Deploy the Smart Contract
+
+  Option A - Using Remix (Easier, No Install):
+    1. Go to https://remix.ethereum.org
+    2. Create new file → paste contents of contracts/ComplaintRegistry.sol
+    3. Compile tab → Select compiler 0.8.20 → Click "Compile"
+    4. Deploy tab → Environment: "Injected Provider - MetaMask"
+    5. Make sure MetaMask is on Polygon Amoy network
+    6. Click "Deploy" → Confirm transaction in MetaMask
+    7. Copy the deployed contract address
+
+  Option B - Using Hardhat (For Developers):
+    1. cd d:\JanMirta_1.0
+    2. pnpm add -D hardhat @nomicfoundation/hardhat-toolbox
+    3. npx hardhat init (choose JavaScript project)
+    4. Configure hardhat.config.js with Amoy network
+    5. Create scripts/deploy.js
+    6. npx hardhat compile
+    7. npx hardhat run scripts/deploy.js --network amoy
+    8. Note the deployed contract address from output
+
+STEP 5: Update Environment Variables
+  - Open apps/api/.env
+  - Set these values:
+
+    BLOCKCHAIN_RPC_URL=https://rpc-amoy.polygon.technology
+    BLOCKCHAIN_PRIVATE_KEY=<your-metamask-private-key>
+    COMPLAINT_CONTRACT_ADDRESS=<deployed-contract-address-from-step-4>
+
+  To get your private key from MetaMask:
+    MetaMask → Account → 3 dots → Account Details → Export Private Key
+
+  WARNING: Never share your private key or commit it to git!
+
+STEP 6: Restart the API Server
+  - cd apps/api
+  - pnpm start:dev
+  - You should see in logs:
+    "[BlockchainService] Blockchain service initialized successfully"
+  - If you see this, blockchain is ACTIVE!
+
+STEP 7: Verify
+  - Open browser or use curl:
+    GET http://localhost:4000/v1/blockchain/status
+  - Should return: { "enabled": true, "message": "Blockchain integration is active" }
+
+================================================================================
+7. HOW IT WORKS AT RUNTIME
+================================================================================
+
+When blockchain is NOT configured (default):
+  - App runs normally
+  - You see warning: "Blockchain not configured — running without blockchain"
+  - All complaint operations work as before
+  - blockchainTxHash and blockchainHash remain null in MongoDB
+
+When blockchain IS configured:
+  - App runs normally + blockchain recording
+  - Complaint creation → hash stored on-chain (background)
+  - Assignment → recorded on-chain (background)
+  - Status update → recorded on-chain (background)
+  - blockchainTxHash and blockchainHash are saved in MongoDB
+  - If blockchain call fails, the complaint operation still succeeds
+    (blockchain is non-blocking, errors are logged but don't affect the user)
+
+================================================================================
+8. VERIFICATION & TAMPER DETECTION
+================================================================================
+
+To verify a complaint hasn't been tampered with:
+
+1. Get the complaint from MongoDB (includes blockchainHash)
+2. Call GET /v1/blockchain/verify/:complaintId/:blockchainHash
+3. If response is { isValid: true } → data is untampered
+4. If response is { isValid: false } → data may have been modified
+
+This works because:
+  - At creation, we hash the complaint data (category + description +
+    reporterId + timestamp) using SHA-256
+  - This hash is stored on-chain (immutable, cannot be changed)
+  - Later, we can re-hash the current data and compare with on-chain hash
+  - If someone modifies the complaint in MongoDB, the hashes won't match
+
+================================================================================
+                              COST SUMMARY
+================================================================================
+
+  Polygon Amoy (Testnet)  : FREE (uses test MATIC from faucet)
+  MetaMask Wallet          : FREE
+  Remix / Hardhat          : FREE (open source tools)
+  ethers.js Library        : FREE (open source)
+  Solidity Compiler        : FREE
+
+  Polygon Mainnet (Production) : ~$0.01-0.05 per transaction
+  (Only if you deploy to real production network in the future)
+
+================================================================================
+                           END OF GUIDE
+================================================================================

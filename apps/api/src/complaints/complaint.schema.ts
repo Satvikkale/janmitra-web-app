@@ -32,6 +32,8 @@ export class Complaint {
   @Prop() assignedTo?: string;
   @Prop({ type: { level: String, dueAt: Date } }) sla?: { level: string; dueAt: Date };
   @Prop({ type: [ProgressUpdateSchema], default: [] }) progressUpdates: ProgressUpdate[];
+  @Prop({ default: null }) blockchainTxHash?: string;
+  @Prop({ default: null }) blockchainHash?: string;
 }
 export const ComplaintSchema = SchemaFactory.createForClass(Complaint);
 ComplaintSchema.index({ societyId: 1, status: 1, createdAt: -1 });

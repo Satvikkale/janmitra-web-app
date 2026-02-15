@@ -5,6 +5,8 @@ import { Complaint, ComplaintEvent } from './complaint.schema';
 import { AddCommentDto, AddProgressUpdateDto, AssignComplaintDto, CreateComplaintDto, ListQueryDto, UpdateStatusDto } from './dto';
 import { RoutingService } from '../routing/routing.service';
 import { EventsGateway } from '../realtime/events.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { BlockchainService } from '../blockchain/blockchain.service';
 
 @Injectable()
 export class ComplaintsService {
@@ -13,6 +15,8 @@ export class ComplaintsService {
     @InjectModel(ComplaintEvent.name) private eventModel: Model<ComplaintEvent>,
     private routing: RoutingService,
     private events: EventsGateway,
+    private notifications: NotificationsService,
+    private blockchain: BlockchainService,
   ) {}
 
   async create(dto: CreateComplaintDto) {
@@ -37,6 +41,28 @@ export class ComplaintsService {
       payload: { category: doc.category, orgId: doc.orgId || null },
     });
     this.events.emitComplaintCreated(doc as any);
+
+    // Notify NGO when complaint is received
+    if (doc.orgId) {
+      const notification = await this.notifications.notifyNgoComplaintReceived(doc.orgId, doc);
+      this.events.emitNgoNotification(doc.orgId, notification);
+    }
+
+    // Record complaint on blockchain (non-blocking)
+    if (this.blockchain.isEnabled()) {
+      const blockchainHash = this.blockchain.generateComplaintHash({
+        category: doc.category,
+        description: doc.description || '',
+        reporterId: doc.reporterId,
+        createdAt: (doc as any).createdAt?.toISOString() || new Date().toISOString(),
+      });
+      this.blockchain.recordComplaintOnChain(String(doc._id), blockchainHash).then(async (txHash) => {
+        if (txHash) {
+          await this.complaintModel.findByIdAndUpdate(doc._id, { blockchainTxHash: txHash, blockchainHash });
+        }
+      });
+    }
+
     return doc;
   }
 
@@ -59,6 +85,16 @@ export class ComplaintsService {
     if (!doc) return null;
     await this.eventModel.create({ complaintId: String(doc._id), type: 'status_changed', actorId: dto.actorId ?? 'u-dev-1', payload: { status: dto.status, note: dto.note } });
     this.events.emitComplaintUpdated(doc as any);
+
+    // Record status change on blockchain (non-blocking)
+    if (this.blockchain.isEnabled()) {
+      this.blockchain.recordStatusUpdateOnChain(String(doc._id), dto.status as any).then(async (txHash) => {
+        if (txHash) {
+          await this.complaintModel.findByIdAndUpdate(doc._id, { blockchainTxHash: txHash });
+        }
+      });
+    }
+
     return doc;
   }
 
@@ -84,6 +120,30 @@ export class ComplaintsService {
       payload: { assignedTo: dto.assignedTo }
     });
     this.events.emitComplaintUpdated(doc as any);
+
+    // Notify NGO user when complaint is assigned to them
+    if (dto.assignedTo) {
+      const notification = await this.notifications.notifyNgoUserAssigned(
+        dto.assignedTo,
+        doc,
+        dto.actorId
+      );
+      this.events.emitNgoUserNotification(dto.assignedTo, notification);
+    }
+
+    // Record assignment on blockchain (non-blocking)
+    if (this.blockchain.isEnabled()) {
+      this.blockchain.recordAssignmentOnChain(
+        String(doc._id),
+        doc.orgId || '',
+        dto.assignedTo,
+      ).then(async (txHash) => {
+        if (txHash) {
+          await this.complaintModel.findByIdAndUpdate(doc._id, { blockchainTxHash: txHash });
+        }
+      });
+    }
+
     return doc;
   }
 

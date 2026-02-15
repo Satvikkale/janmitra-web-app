@@ -8,6 +8,7 @@ import { RoutingModule } from 'src/routing/routing.module';
 import { UsersModule } from 'src/users/users.module';
 import { SocietyMembership, SocietyMembershipSchema } from 'src/societies/membership.schema';
 import { Society, SocietySchema } from 'src/societies/society.schema';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -19,7 +20,8 @@ import { Society, SocietySchema } from 'src/societies/society.schema';
     ]),
     UsersModule,
     RealtimeModule,
-    RoutingModule
+    RoutingModule,
+    NotificationsModule,
   ],
   controllers: [ComplaintsController],
   providers: [ComplaintsService],
